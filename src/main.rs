@@ -6,8 +6,8 @@ use axum::{
     Router,
 };
 use nanoid;
-use shuttle_runtime::CustomError;
-use sqlx::{Error, FromRow, PgPool};
+use shuttle_runtime;
+use sqlx::{Error, PgPool};
 use url::Url;
 
 #[derive(Clone)]
@@ -15,14 +15,11 @@ struct AppState {
     pool: PgPool,
 }
 
-#[derive(FromRow)]
-struct UrlLookup(pub String);
-
-async fn lookup(
+async fn redirect(
     Path(id): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Redirect, StatusCode> {
-    sqlx::query_as::<_, UrlLookup>("SELECT url FROM urls WHERE id = $1")
+    sqlx::query_as::<_, (String,)>("SELECT url FROM urls WHERE id = $1")
         .bind(id)
         .fetch_one(&state.pool)
         .await
@@ -30,10 +27,10 @@ async fn lookup(
             Error::RowNotFound => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         })
-        .map(|UrlLookup(url)| Redirect::permanent(&url))
+        .map(|(url,)| Redirect::to(&url))
 }
 
-async fn store(
+async fn shorten(
     State(state): State<AppState>,
     url: String,
 ) -> Result<(StatusCode, String), StatusCode> {
@@ -52,12 +49,15 @@ async fn store(
 async fn main(
     #[shuttle_shared_db::Postgres] pool: PgPool,
 ) -> shuttle_axum::ShuttleAxum {
-    sqlx::migrate!().run(&pool).await.map_err(CustomError::new)?;
+    sqlx::migrate!()
+        .run(&pool)
+        .await
+        .map_err(shuttle_runtime::CustomError::new)?;
 
     let state = AppState { pool };
     let router = Router::new()
-        .route("/:id", get(lookup))
-        .route("/", post(store))
+        .route("/:id", get(redirect))
+        .route("/", post(shorten))
         .with_state(state);
     Ok(router.into())
 }
