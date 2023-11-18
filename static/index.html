@@ -1,0 +1,21 @@
+<html>
+    <head>
+        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    </head>
+    <body>
+
+        <h3> 
+            url shortener
+            <span class="htmx-indicator">processing...</span> 
+        </h3>
+
+        <form hx-post="/" hx-target="#short">
+            <label for="url">URL:</label>
+            <input type="text" id="url" name="url">
+            <button>Submit</button>
+        </form>
+
+        <div id="short"></div>
+
+    </body>
+</html
