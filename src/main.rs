@@ -56,20 +56,28 @@ async fn redirect(
 async fn shorten(
     State(state): State<AppState>,
     Form(form): Form<ShortenRequest>,
-) -> Result<(StatusCode, Html<String>), StatusCode> {
-    let url = Url::parse(&form.url).map_err(|_| StatusCode::BAD_REQUEST)?;
+) -> Result<(StatusCode, Html<String>), (StatusCode, String)> {
+    let url = Url::parse(&form.url)
+        .map_err(|_| (StatusCode::BAD_REQUEST, String::from("invalid url")))?;
     let id = nanoid::nanoid!(21);
-    let shortened = state
-        .url_base
-        .join(&id)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let shortened = state.url_base.join(&id).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            String::from("invalid url"),
+        )
+    })?;
     let a = Html(format!("<a href=\"{0}\">{0}</a>", shortened.to_string()));
     sqlx::query("INSERT INTO urls(id, url) VALUES ($1, $2)")
         .bind(&id)
         .bind(url.as_str())
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                String::from("internal error"),
+            )
+        })
         .map(|_| (StatusCode::OK, a))
 }
 

@@ -1,21 +1,23 @@
 <html>
     <head>
-        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+        <script src="https://unpkg.com/htmx.org@1.9.8"></script>
+        <script src="https://unpkg.com/htmx.org@1.9.8/dist/ext/response-targets.js"></script>
     </head>
-    <body>
+    <body hx-ext="response-targets">
 
         <h3> 
             url shortener
             <span class="htmx-indicator">processing...</span> 
         </h3>
 
-        <form hx-post="/" hx-target="#short">
+        <form hx-post="/" hx-target="#response"
+                          hx-target-error="#response">
             <label for="url">URL:</label>
             <input type="text" id="url" name="url">
             <button>Submit</button>
         </form>
 
-        <div id="short"></div>
+        <div id="response"></div>
 
     </body>
 </html
