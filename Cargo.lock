@@ -224,12 +224,14 @@ dependencies = [
 name = "breve"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
  "nanoid",
  "rust-embed",
  "serde",
  "shuttle-axum",
  "shuttle-runtime",
+ "shuttle-secrets",
  "shuttle-shared-db",
  "sqlx",
  "tokio",
@@ -1995,6 +1997,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "secrecy"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
+dependencies = [
+ "serde",
+ "zeroize",
+]
+
+[[package]]
 name = "security-framework"
 version = "2.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2223,6 +2235,18 @@ dependencies = [
  "tonic 0.10.2",
  "tower",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "shuttle-secrets"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41993acf532a99c7a7b96cb7d5cecd22ef7d0e68e9479c0973f3548f107c5765"
+dependencies = [
+ "async-trait",
+ "secrecy",
+ "serde",
+ "shuttle-service",
 ]
 
 [[package]]
