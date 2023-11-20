@@ -1,7 +1,7 @@
 use axum::{
     extract::{Form, Path, State},
     http::StatusCode,
-    response::{Html, Redirect},
+    response::{Html, IntoResponse, Redirect},
     routing::{get, post},
     Router,
 };
@@ -12,6 +12,7 @@ use shuttle_runtime;
 use shuttle_secrets;
 use shuttle_shared_db;
 use sqlx;
+use std::string;
 use url::Url;
 
 #[derive(Clone)]
@@ -29,56 +30,90 @@ struct ShortenRequest {
     pub url: String,
 }
 
-async fn index() -> Result<Html<String>, StatusCode> {
-    let file =
-        Assets::get("index.html").ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+struct HtmlResponse(pub StatusCode, pub Html<String>);
+
+impl HtmlResponse {
+    fn new<S: Into<String>>(code: StatusCode, html: S) -> Self {
+        Self(code, Html(html.into()))
+    }
+
+    fn server_error() -> Self {
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, "server error")
+    }
+
+    fn not_found() -> Self {
+        Self::new(StatusCode::NOT_FOUND, "not found")
+    }
+
+    fn bad_request<S: Into<String>>(html: S) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, html)
+    }
+
+    fn ok<S: Into<String>>(html: S) -> Self {
+        Self::new(StatusCode::OK, html)
+    }
+}
+
+impl IntoResponse for HtmlResponse {
+    fn into_response(self) -> axum::response::Response {
+        let Self(code, html) = self;
+        (code, html).into_response()
+    }
+}
+
+impl From<url::ParseError> for HtmlResponse {
+    fn from(_: url::ParseError) -> Self {
+        HtmlResponse::bad_request("invalid url")
+    }
+}
+
+impl From<sqlx::Error> for HtmlResponse {
+    fn from(err: sqlx::Error) -> Self {
+        match err {
+            sqlx::Error::RowNotFound => HtmlResponse::not_found(),
+            _ => HtmlResponse::server_error(),
+        }
+    }
+}
+
+impl From<string::FromUtf8Error> for HtmlResponse {
+    fn from(_: string::FromUtf8Error) -> Self {
+        HtmlResponse::server_error()
+    }
+}
+
+async fn index() -> Result<HtmlResponse, HtmlResponse> {
+    let file = Assets::get("index.html").ok_or(HtmlResponse::server_error())?;
     let data = file.data.into_owned();
-    let index = String::from_utf8(data)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Html(index))
+    let index = String::from_utf8(data)?;
+    Ok(HtmlResponse::ok(index))
 }
 
 async fn redirect(
     Path(id): Path<String>,
     State(state): State<AppState>,
-) -> Result<Redirect, StatusCode> {
-    sqlx::query_as::<_, (String,)>("SELECT url FROM urls WHERE id = $1")
+) -> Result<Redirect, HtmlResponse> {
+    let url: (String,) = sqlx::query_as("SELECT url FROM urls WHERE id = $1")
         .bind(id)
         .fetch_one(&state.pool)
-        .await
-        .map_err(|err| match err {
-            sqlx::Error::RowNotFound => StatusCode::NOT_FOUND,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        })
-        .map(|(url,)| Redirect::to(&url))
+        .await?;
+    Ok(Redirect::to(&url.0))
 }
 
 async fn shorten(
     State(state): State<AppState>,
     Form(form): Form<ShortenRequest>,
-) -> Result<(StatusCode, Html<String>), (StatusCode, String)> {
-    let url = Url::parse(&form.url)
-        .map_err(|_| (StatusCode::BAD_REQUEST, String::from("invalid url")))?;
+) -> Result<HtmlResponse, HtmlResponse> {
+    let url = Url::parse(&form.url)?;
     let id = nanoid::nanoid!(21);
-    let shortened = state.url_base.join(&id).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            String::from("invalid url"),
-        )
-    })?;
-    let a = Html(format!("<a href=\"{0}\">{0}</a>", shortened.to_string()));
+    let shortened = state.url_base.join(&id)?;
+    let a = format!("<a href=\"{0}\">{0}</a>", shortened.to_string());
     sqlx::query("INSERT INTO urls(id, url) VALUES ($1, $2)")
         .bind(&id)
         .bind(url.as_str())
         .execute(&state.pool)
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                String::from("internal error"),
-            )
-        })
-        .map(|_| (StatusCode::OK, a))
+        .await?;
+    Ok(HtmlResponse::ok(a))
 }
 
 #[shuttle_runtime::main]
